@@ -158,77 +158,120 @@ const DynamicMenu: React.FC = () => {
   
   // Determine current season based on date
   useEffect(() => {
-    const month = new Date().getMonth();
-    if (month >= 2 && month <= 4) setCurrentSeason('spring');
-    else if (month >= 5 && month <= 7) setCurrentSeason('summer');
-    else if (month >= 8 && month <= 10) setCurrentSeason('fall');
-    else setCurrentSeason('winter');
+    const date = new Date();
+    const month = date.getMonth();
+    
+    if (month >= 2 && month <= 4) {
+      setCurrentSeason('spring');
+    } else if (month >= 5 && month <= 7) {
+      setCurrentSeason('summer');
+    } else if (month >= 8 && month <= 10) {
+      setCurrentSeason('fall');
+    } else {
+      setCurrentSeason('winter');
+    }
   }, []);
 
-  // Simplified filtering logic
+  // Filter items based on user preferences and active tag
   useEffect(() => {
     let filtered = [...menuItems];
     
-    // Basic tag filtering
+    // Filter by dietary restrictions
+    if (userPreferences.dietaryRestrictions.length > 0) {
+      filtered = filtered.filter(item => {
+        // An item is included if it has ALL the tags from dietary restrictions
+        return userPreferences.dietaryRestrictions.every(restriction => 
+          item.tags.includes(restriction)
+        );
+      });
+    }
+    
+    // Filter by active tag if set
     if (activeTag) {
       filtered = filtered.filter(item => item.tags.includes(activeTag));
     }
     
-    // Basic dietary restrictions
-    if (userPreferences.dietaryRestrictions.length > 0) {
-      filtered = filtered.filter(item => 
-        userPreferences.dietaryRestrictions.every(restriction => 
-          item.tags.includes(restriction)
-        )
-      );
-    }
-    
-    // Basic seasonality
+    // Filter by seasonality if preferred
     if (userPreferences.preferredSeasonality) {
       filtered = filtered.filter(item => item.seasonality.includes(currentSeason));
     }
     
-    // Simple sorting by nutrition score
-    filtered.sort((a, b) => b.nutritionScore - a.nutritionScore);
+    // Sort by combined score based on user preferences
+    filtered.sort((a, b) => {
+      const aScore = 
+        ((100 - a.carbonFootprint) * userPreferences.sustainabilityFocus / 100) + 
+        (a.nutritionScore * userPreferences.nutritionFocus / 100) +
+        (userPreferences.favoriteTags.some(tag => a.tags.includes(tag)) ? 20 : 0);
+      
+      const bScore = 
+        ((100 - b.carbonFootprint) * userPreferences.sustainabilityFocus / 100) + 
+        (b.nutritionScore * userPreferences.nutritionFocus / 100) +
+        (userPreferences.favoriteTags.some(tag => b.tags.includes(tag)) ? 20 : 0);
+      
+      return bScore - aScore;
+    });
     
     setFilteredItems(filtered);
-  }, [activeTag, userPreferences, currentSeason]);
+    
+    // For demo: Unlock achievement if the user has viewed a seasonal menu
+    if (userPreferences.preferredSeasonality) {
+      unlockAchievement('seasonal_connoisseur');
+    }
+    
+    // For demo: If the user has applied filters matching sustainability criteria
+    if (userPreferences.sustainabilityFocus > 70) {
+      unlockAchievement('sustainability_advocate');
+    }
+  }, [activeTag, userPreferences, currentSeason, unlockAchievement]);
 
-  // Simplified preference toggles
+  // Update a dietary restriction preference
   const toggleDietaryRestriction = (restriction: string) => {
-    setUserPreferences(prev => ({
-      ...prev,
-      dietaryRestrictions: prev.dietaryRestrictions.includes(restriction)
+    setUserPreferences(prev => {
+      const newRestrictions = prev.dietaryRestrictions.includes(restriction) 
         ? prev.dietaryRestrictions.filter(r => r !== restriction)
-        : [...prev.dietaryRestrictions, restriction]
-    }));
+        : [...prev.dietaryRestrictions, restriction];
+      
+      return {
+        ...prev,
+        dietaryRestrictions: newRestrictions
+      };
+    });
   };
 
+  // Update a favorite tag
   const toggleFavoriteTag = (tag: string) => {
-    setUserPreferences(prev => ({
-      ...prev,
-      favoriteTags: prev.favoriteTags.includes(tag)
+    setUserPreferences(prev => {
+      const newFavoriteTags = prev.favoriteTags.includes(tag) 
         ? prev.favoriteTags.filter(t => t !== tag)
-        : [...prev.favoriteTags, tag]
-    }));
+        : [...prev.favoriteTags, tag];
+      
+      return {
+        ...prev,
+        favoriteTags: newFavoriteTags
+      };
+    });
   };
 
-  // Reset preferences
+  // Reset preferences to default
   const resetPreferences = () => {
     setUserPreferences(defaultPreferences);
     setActiveTag(null);
   };
 
-  // View item details
+  // Select a menu item to view details
   const viewItemDetails = (item: MenuItem) => {
     setSelectedItem(item);
+    
+    // Award points for exploring seasonal items
     if (item.seasonality.includes(currentSeason)) {
       awardPoints(POINT_ACTIONS.find(a => a.id === 'sustainable_choice')!);
     }
   };
 
-  // Generate all unique tags
+  // Generate all unique tags from menu items
   const allTags = Array.from(new Set(menuItems.flatMap(item => item.tags)));
+  
+  // Dietary restrictions options
   const dietaryOptions = ['vegan', 'vegetarian', 'gluten-free'];
 
   return (
